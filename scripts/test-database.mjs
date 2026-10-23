@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 const db = new PGlite();
@@ -16,7 +16,10 @@ async function admin(){ await db.exec('reset role'); }
 
 try {
   await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit integer,allowed_mime_types text[]); create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text); create function storage.foldername(name text) returns text[] language sql immutable as $$ select regexp_split_to_array(name,'/') $$; alter table storage.objects enable row level security; grant usage on schema auth,storage to authenticated; grant select,insert,update,delete on storage.objects to authenticated;`);
-  await db.exec(readFileSync(new URL('../supabase/migrations/202610230001_markaz.sql',import.meta.url),'utf8'));
+  const migrations = new URL('../supabase/migrations/', import.meta.url);
+  for (const filename of readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()) {
+    await db.exec(readFileSync(new URL(filename, migrations), 'utf8'));
+  }
   const tableGrant=await query(`select has_table_privilege('anon','public.subjects','select') as allowed,has_function_privilege('anon','public.start_focus(uuid,uuid,text,integer,uuid)','execute') as rpc`);
   assert.equal(tableGrant[0].allowed,false); assert.equal(tableGrant[0].rpc,false);
   await query('insert into auth.users(id) values($1),($2)',[A,B]);
