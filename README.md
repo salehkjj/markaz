@@ -4,12 +4,12 @@
 
 ## تشغيل سريع
 
-1. أنشئ مشروع Supabase مجانيًا، ثم افتح **SQL Editor** وشغّل الملف [`supabase/migrations/202610230001_markaz.sql`](supabase/migrations/202610230001_markaz.sql) كاملًا مرة واحدة على مشروع جديد. ينشئ الجداول ودوال المؤقت وسياسات العزل ومساحة `study-files` الخاصة.
-2. في **Authentication → Providers → Email** فعّل البريد وكلمة المرور. لتأكيد البريد واستعادة كلمة المرور، اضبط خدمة البريد في Supabase بحسب حدود خطتك المجانية. في **Authentication → URL Configuration** ضع رابط التطبيق النهائي في **Site URL** وأضفه إلى **Redirect URLs**. للتطوير المحلي أضف `http://localhost:3000` و`http://localhost:3000/**`.
+1. مشروع Supabase الخاص بـ«مركز» موجود. عند إنشاء مشروع بديل، طبّق ملفات SQL في [`supabase/migrations`](supabase/migrations) بالترتيب. تنشئ الجداول ودوال المؤقت وسياسات العزل ومساحة `study-files` الخاصة.
+2. في **Authentication → Providers → Email** فعّل البريد وكلمة المرور. لتأكيد البريد واستعادة كلمة المرور، اضبط خدمة البريد في Supabase بحسب حدود خطتك المجانية. في **Authentication → URL Configuration** ضع `https://salehkjj.github.io/markaz/` في **Site URL**، وأضف هذا الرابط و`https://salehkjj.github.io/markaz/?recovery=1` إلى **Redirect URLs**. للتطوير المحلي أضف الرابطين نفسيهما على `http://localhost:3000/markaz/`.
 3. انسخ `.env.example` إلى `.env.local` وأدخل `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_ANON_KEY` من **Project Settings → API**. استخدم مفتاح publishable أو anon العام فقط. **لا تضع service_role في التطبيق أو Vercel.**
-4. نفّذ `npm ci` ثم `npm run dev` وافتح `http://localhost:3000`.
+4. نفّذ `npm ci` ثم `npm run dev` وافتح `http://localhost:3000/markaz/`.
 
-عند النشر على Vercel: استورد المستودع كمشروع Next.js، وأضف المتغيرين العامين نفسيهما ضمن Environment Variables للإنتاج، ثم انشر. بعد معرفة رابط Vercel حدّث Site URL وRedirect URLs في Supabase، وأعد نشر Vercel إذا أُضيفت المتغيرات بعد أول بناء. ملف `.env.local` مستبعد من Git. متغيرات `NEXT_PUBLIC_*` تُضمَّن في وقت البناء؛ تغييرها يحتاج بناء جديدًا.
+النشر الحالي مُعدّ لـ GitHub Pages عبر `.github/workflows/pages.yml` مع المسار `/markaz/`. رابط Supabase ومفتاحه publishable العام مضمنان في سير البناء لأنهما إعدادات عميل عامة، وليس فيه مفتاح `service_role`. بعد تفعيل Pages باختيار **GitHub Actions** مصدرًا، يدفع الفرع `main` تصديرًا ثابتًا تلقائيًا. لا يحتاج الموقع خادم Next.js؛ المصادقة والحفظ والملفات تستمر عبر Supabase. ملف `.env.local` مستبعد من Git. متغيرات `NEXT_PUBLIC_*` تُضمَّن في وقت البناء؛ تغييرها يحتاج بناء جديدًا.
 
 ## ما يعمل
 
@@ -37,4 +37,4 @@ npm run build
 - استخراج PDF نصي بقواعد عناوين قابلة للتعديل؛ لا OCR للملفات المصورة، ولا تحليل ذكي مدفوع. تقسيم الملف قبل الاعتماد يظل في الصفحة الحالية؛ بعد تحديثها يبقى الملف محفوظًا ويمكن طلب التقسيم مرة أخرى من قائمة الملفات أو إنشاء جزئيات يدويًا.
 - تنبيهات الصوت والعمل المستمر في خلفية iOS غير مضمونة. مدة الجلسة تُستعاد من طوابع زمنية مخزنة، ولا تبدأ جلسة جديدة تلقائيًا.
 - JSON يشمل بيانات الملف ووصفه، ولا يشمل محتوى PDF نفسه؛ يمكن فتح الملف وتنزيله من «موادي». استيراد النسخة الاحتياطية غير متاح حاليًا.
-- حدود Supabase/Vercel المجانية، خاصة حجم التخزين والبريد والنطاق، قد تتغير حسب خطتهما. الوظائف الأساسية لا تتطلب اشتراكًا مدفوعًا.
+- حدود Supabase/GitHub Pages المجانية، خاصة حجم التخزين والبريد وسير البناء، قد تتغير حسب خطتهما. الوظائف الأساسية لا تتطلب اشتراكًا مدفوعًا.

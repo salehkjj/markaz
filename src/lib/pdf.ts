@@ -113,7 +113,7 @@ export async function extractPdf(file: File): Promise<PdfExtraction> {
     const bytes = new Uint8Array(await file.arrayBuffer());
     validatePdfHeader(bytes);
     const pdfjs = await import('pdfjs-dist');
-    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+    pdfjs.GlobalWorkerOptions.workerSrc = '/markaz/pdf.worker.min.mjs';
     const task = pdfjs.getDocument({data: bytes, useSystemFonts: true});
     loadingTask = task;
     const document = await task.promise;
