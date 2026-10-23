@@ -1,0 +1,72 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+
+const db = new PGlite();
+const A = '11111111-1111-4111-8111-111111111111';
+const B = '22222222-2222-4222-8222-222222222222';
+const subjectA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const subjectB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const topicA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01';
+const topicB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01';
+const query = async (sql, params) => (await db.query(sql, params)).rows;
+const expectReject = async (fn, description) => { let rejected=false; try { await fn(); } catch { rejected=true; } assert.ok(rejected,description); };
+async function user(id){ await db.exec('set role authenticated'); await query('select set_config($1,$2,false)',['request.jwt.claim.sub',id]); }
+async function admin(){ await db.exec('reset role'); }
+
+try {
+  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit integer,allowed_mime_types text[]); create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text); create function storage.foldername(name text) returns text[] language sql immutable as $$ select regexp_split_to_array(name,'/') $$; alter table storage.objects enable row level security; grant usage on schema auth,storage to authenticated; grant select,insert,update,delete on storage.objects to authenticated;`);
+  await db.exec(readFileSync(new URL('../supabase/migrations/202610230001_markaz.sql',import.meta.url),'utf8'));
+  const tableGrant=await query(`select has_table_privilege('anon','public.subjects','select') as allowed,has_function_privilege('anon','public.start_focus(uuid,uuid,text,integer,uuid)','execute') as rpc`);
+  assert.equal(tableGrant[0].allowed,false); assert.equal(tableGrant[0].rpc,false);
+  await query('insert into auth.users(id) values($1),($2)',[A,B]);
+  await user(A);
+  await query(`insert into public.profiles(user_id,weekly_minutes,onboarded) values($1,array[45,45,45,45,45,45,45],true)`,[A]);
+  await query(`insert into public.subjects(id,user_id,title) values($1,$2,'بحوث العمليات')`,[subjectA,A]);
+  await query(`insert into public.topics(id,user_id,subject_id,title,minutes) values($1,$2,$3,'البرمجة الخطية',25)`,[topicA,A,subjectA]);
+  const today=(await query(`select (now() at time zone 'Asia/Riyadh')::date::text as day`))[0].day;
+  const taskId=(await query(`insert into public.tasks(user_id,topic_id,day,minutes) values($1,$2,$3,30) returning id`,[A,topicA,today]))[0].id;
+  await expectReject(()=>query(`insert into public.tasks(user_id,topic_id,day,minutes) values($1,$2,$3,20)`,[A,topicA,today]),'daily capacity must reject overflow');
+  await expectReject(()=>query(`update public.profiles set weekly_minutes=array[10,10,10,10,10,10,10] where user_id=$1`,[A]),'profile cannot silently shrink below scheduled tasks');
+  await query(`insert into storage.objects(bucket_id,name) values('study-files',$1)`,[A+'/a.pdf']);
+  const requestId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa02';
+  const first=(await query(`select public.start_focus($1,null,'focus',60,$2) as result`,[topicA,requestId]))[0].result;
+  const again=(await query(`select public.start_focus($1,null,'focus',60,$2) as result`,[topicA,requestId]))[0].result;
+  assert.equal(first.id,again.id,'focus start is idempotent');
+  await expectReject(()=>query(`select public.start_focus($1,null,'focus',60,gen_random_uuid())`,[topicA]),'second live session must be rejected');
+  await user(B);
+  await query(`insert into public.profiles(user_id,weekly_minutes,onboarded) values($1,array[30,30,30,30,30,30,30],true)`,[B]);
+  await query(`insert into public.subjects(id,user_id,title) values($1,$2,'الإحصاء')`,[subjectB,B]);
+  await query(`insert into public.topics(id,user_id,subject_id,title,minutes) values($1,$2,$3,'احتمالات',25)`,[topicB,B,subjectB]);
+  assert.equal((await query('select count(*)::integer as n from public.subjects'))[0].n,1,'RLS must hide other subjects');
+  assert.equal((await query('select count(*)::integer as n from public.topics'))[0].n,1,'RLS must hide other topics');
+  assert.equal((await query('select count(*)::integer as n from public.sessions'))[0].n,0,'RLS must hide other sessions');
+  assert.equal((await query(`select count(*)::integer as n from storage.objects`))[0].n,0,'private storage policy must hide other files');
+  await expectReject(()=>query(`insert into public.topics(user_id,subject_id,title) values($1,$2,'تطفل')`,[B,subjectA]),'cross-owner foreign key must be rejected');
+  await expectReject(()=>query(`select public.start_focus($1,null,'focus',60,gen_random_uuid())`,[topicA]),'RPC must reject cross-owner topic');
+  await expectReject(()=>query(`select public.control_focus($1,'cancel',1)`,[requestId]),'RPC must reject cross-owner session');
+  await expectReject(()=>query(`insert into storage.objects(bucket_id,name) values('study-files',$1)`,[A+'/b.pdf']),'private storage policy must reject another user path');
+  await expectReject(()=>query(`insert into public.exams(user_id,subject_id,title,exam_on,topic_ids) values($1,$2,'ميد',$3,array[$4::uuid])`,[B,subjectB,today,topicA]),'exam scope must belong to same user and subject');
+  await user(A);
+  await expectReject(()=>query(`select public.control_focus($1,'complete',1)`,[requestId]),'session cannot complete before its duration');
+  const cancelled=(await query(`select public.control_focus($1,'cancel',1) as result`,[requestId]))[0].result;
+  assert.equal(cancelled.status,'cancelled');
+  const repeat=(await query(`select public.control_focus($1,'cancel',1) as result`,[requestId]))[0].result;
+  assert.equal(repeat.version,cancelled.version,'terminal cancellation must be idempotent');
+  const focus2='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa03';
+  await query(`select public.start_focus($1,$2,'focus',60,$3)`,[topicA,taskId,focus2]);
+  await admin();
+  await query(`update public.sessions set started_at=started_at-interval '70 seconds' where id=$1`,[focus2]);
+  await user(A);
+  const completed=(await query(`select public.control_focus($1,'complete',1) as result`,[focus2]))[0].result;
+  assert.equal(completed.status,'completed');
+  await query(`select public.replace_plan('[]'::jsonb)`);
+  assert.equal((await query(`select count(*)::integer as n from public.tasks where id=$1`,[taskId]))[0].n,1,'unassessed completed focus must keep its task');
+  const assessment=(await query(`select public.assess_focus($1,'review','no','أحتاج مسائل زيادة') as result`,[focus2]))[0].result;
+  const assessmentAgain=(await query(`select public.assess_focus($1,'understood','yes','') as result`,[focus2]))[0].result;
+  assert.equal(assessment.id,assessmentAgain.id,'assessment must be idempotent');
+  assert.equal((await query(`select understanding from public.topics where id=$1`,[topicA]))[0].understanding,'review');
+  assert.equal((await query(`select status from public.tasks where id=$1`,[taskId]))[0].status,'pending','shorter focus cannot falsely complete a task');
+  await admin();
+  console.log('Database integration: migration, RLS, private storage, owner FKs, capacity, focus idempotency/completion, assessment passed.');
+} finally { await db.close(); }
