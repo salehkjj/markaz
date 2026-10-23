@@ -102,7 +102,7 @@ export function Plan({data, userId, run, busy, onStart}:ViewProps & {onStart:(to
       {proposal.warnings.map((warning,index)=><div className="notice" key={index}>{warning}</div>)}
       {proposal.tasks.length===0?<div className="empty-state"><CalendarDays size={28}/><p>ما فيه مهام جديدة مناسبة للوقت المتاح.</p><p className="muted">راجع جزئياتك ووقت المذاكرة في الإعدادات.</p></div>:[...new Set(proposal.tasks.map(task=>task.day))].map(day=>{
         const proposed=proposal.tasks.filter(task=>task.day===day);
-        const retained=data.tasks.filter(task=>task.day===day&&(task.manual||task.status!=='pending'));
+        const retained=data.tasks.filter(task=>task.day===day&&(task.manual||task.status!=='pending'||data.sessions.some(session=>session.task_id===task.id&&(session.status==='running'||session.status==='paused'||session.status==='completed'&&session.kind==='focus'&&!data.assessments.some(assessment=>assessment.session_id===session.id)))));
         const total=[...proposed,...retained].reduce((sum,task)=>sum+task.minutes,0);
         return <div key={day} className="stack"><div className="row"><h3>{dateLabel(day)}</h3><span className="badge">{number(total)} / {number(capacity(day))} دقيقة</span></div>{proposed.map(task=><div className="task-row" key={task.id}><div><strong>{topic(task)?.title||'جزئية غير متاحة'}</strong><p className="muted">{subject(task)?.title} · {task.kind==='review'?'مراجعة':'مذاكرة'} · {number(task.minutes)} دقيقة</p><small className="muted">{proposal.reasons[task.topic_id]}</small></div></div>)}{retained.length>0&&<small className="muted">يشمل الوقت {number(retained.length)} من مهامك المحفوظة.</small>}</div>;
       })}

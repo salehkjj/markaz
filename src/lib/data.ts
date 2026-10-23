@@ -5,9 +5,12 @@ export async function fetchStudyData(userId:string):Promise<StudyData> {
   const results = await Promise.all(names.map(async name => {
     const rows:Record<string,unknown>[]=[];
     for(let from=0;from<=10000;from+=500){
-      const result=check(await db().from(name).select('*').eq('user_id',userId).order(name==='profiles'?'user_id':'id').range(from,from+499));
+      const result=check(await db().from(name).select('*',{count:'exact'}).eq('user_id',userId).order(name==='profiles'?'user_id':'id').range(from,from+499));
       rows.push(...(result.data??[]));
-      if((result.data?.length??0)<500)return rows;
+      if((result.data?.length??0)<500){
+        if(result.count!==null && rows.length<result.count) throw new Error('خادم البيانات حدّد حجم القراءة. لم نعرض أو نصدر نسخة ناقصة.');
+        return rows;
+      }
     }
     throw new Error('تجاوزت البيانات حد التحميل الآمن. لم نعرض بيانات ناقصة.');
   }));

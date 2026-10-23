@@ -39,9 +39,10 @@ export function proposePlan(data: StudyData, today: string): PlanProposal {
   const capacities = new Map(days.map(day => [day, profile.rest_days.includes(weekday(day))
     ? 0 : integerMinutes(profile.weekly_minutes[weekday(day)] ?? 0)]));
   const remaining = new Map(capacities);
-  // replace_plan removes only pending automatic tasks, excluding a task in a live session.
+  // replace_plan keeps work in a live session or completed session awaiting assessment.
   const activeTaskIds = new Set(data.sessions
-    .filter(session => session.status === 'running' || session.status === 'paused')
+    .filter(session => session.status === 'running' || session.status === 'paused' ||
+      (session.status === 'completed' && session.kind === 'focus' && !data.assessments.some(assessment => assessment.session_id === session.id)))
     .map(session => session.task_id).filter(Boolean));
   const retained = data.tasks.filter(task => task.manual || task.status !== 'pending' || activeTaskIds.has(task.id));
   const topicIds = new Set(data.topics.map(topic => topic.id));
@@ -120,6 +121,10 @@ export function proposePlan(data: StudyData, today: string): PlanProposal {
     if (unallocated > 0) {
       // Reviews outside the horizon are simply not due in this plan.
       if (candidate.availableFrom > days[days.length - 1] && !candidate.exam) continue;
+      if (candidate.exam && candidate.exam.exam_on > days[days.length - 1]) {
+        proposal.warnings.push(`«${candidate.topic.title}»: بقي ${unallocated} دقيقة بعد خطة الثلاثين يومًا. الاختبار أبعد من ذلك؛ اقترح خطة جديدة لاحقًا لتغطية الباقي.`);
+        continue;
+      }
       const deadline = candidate.exam ? `قبل اختبار «${candidate.exam.title}» في ${candidate.exam.exam_on}` : 'خلال الثلاثين يومًا القادمة';
       proposal.warnings.push(`الوقت ما يكفي لـ«${candidate.topic.title}»: باقي ${unallocated} دقيقة ${deadline}. رتّب الأولوية أو عدّل وقتك المتاح.`);
     }

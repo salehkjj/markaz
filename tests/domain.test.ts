@@ -134,4 +134,10 @@ describe('capacity-constrained planner', () => {
     const plan = proposePlan(data({ tasks: [task('live', { minutes: 60 })], sessions: [session({ task_id: 'live', status: 'paused' })] }), '2026-10-23');
     expect(plan.tasks).toHaveLength(0);
   });
+  it('retains a task waiting for assessment after focus completes', () => {
+    const source = data({ tasks: [task('awaiting', { minutes: 60 })], sessions: [session({ task_id: 'awaiting', status: 'completed', completed_at: '2026-10-23T12:30:00Z' })] });
+    expect(proposePlan(source, '2026-10-23').tasks).toHaveLength(0);
+    source.assessments = [{ id: 'rating', user_id: 'u', session_id: 'one', topic_id: 'a', understanding: 'review', evidence: 'no', note: '', created_at: '2026-10-23T12:35:00Z' }];
+    expect(proposePlan(source, '2026-10-23').tasks.length).toBeGreaterThan(0);
+  });
 });
