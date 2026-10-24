@@ -1,10 +1,10 @@
 import {Check,LockKeyhole,Star} from 'lucide-react';
 import type {FocusSession} from '@/lib/types';
-import {rewards} from '@/lib/rewards';
+import {rewards,rewardsFromDays} from '@/lib/rewards';
 import {riyadhDate} from '@/lib/dates';
 import {Tomato} from './tomato';
-export function StreakTrack({sessions}:{sessions:FocusSession[]}) {
- const record=rewards(sessions,riyadhDate());
+export function StreakTrack({sessions,focusDays}:{sessions:FocusSession[];focusDays?:string[]}) {
+ const record=focusDays?rewardsFromDays(focusDays,riyadhDate()):rewards(sessions,riyadhDate());
  return <section className="panel streak-track" aria-label="مسار الاستمرار لعشرة أيام">
  <div className="section-heading"><div><p className="eyebrow">سجل الاستمرار</p><h2>{record.current.toLocaleString('ar-SA')} <small>يوم متواصل</small></h2></div><span className="points"><Star size={15}/>{record.points.toLocaleString('ar-SA')} نقطة</span></div>
  <div className="ten-day-track">{Array.from({length:10},(_,i)=>{const day=i+1,earned=day<=record.cycle,milestone=day%5===0;return <div key={day} className={`track-day ${earned?'earned':''} ${milestone?'milestone':''}`} aria-label={`اليوم ${day}، ${earned?'مكتمل':'لم يكتمل'}${milestone?'، مكافأة ٢٥ نقطة':''}`}><div className="day-mark">{milestone?<><Tomato/>{!earned&&<LockKeyhole className="tomato-lock" size={14}/>}</>:earned?<Check size={16}/>:<span className="day-dot"/>}</div><small>{day.toLocaleString('ar-SA')}</small></div>})}</div>

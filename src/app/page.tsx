@@ -1,2 +1,2 @@
-import { StudyApp } from '@/components/study-app';
-export default function Page(){return <StudyApp/>;}
+import {TeamApp} from '@/components/team-app';
+export default function Page(){return <TeamApp/>;}
