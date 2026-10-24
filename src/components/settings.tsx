@@ -9,7 +9,7 @@ import type { ViewProps } from '@/lib/types';
 const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const colors = ['#a24232', '#526651', '#b48837', '#46566f', '#805d55'];
 type Starter = { id: string; title: string; examId: string; examTitle: string; examOn: string };
-const newStarter = (): Starter => ({ id: crypto.randomUUID(), title: '', examId: crypto.randomUUID(), examTitle: 'اختبار', examOn: '' });
+const newStarter = (): Starter => ({ id: crypto.randomUUID(), title: '', examId: crypto.randomUUID(), examTitle: 'تسليم', examOn: '' });
 
 export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDone?: () => void }) {
   const initial = data.profile;
@@ -27,11 +27,11 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
     const incomplete = minutes.some((value, index) => !rest.includes(index) && (value.trim() === '' || !Number.isInteger(Number(value)) || Number(value) < 0 || Number(value) > 1440));
     if (incomplete) { setValidation('حدّد وقتك لكل يوم بالدقائق، أو علّمه يوم راحة. المدى من ٠ إلى ١٤٤٠ دقيقة.'); return; }
     if (starters.some(item => !item.title.trim())) { setValidation('اكتب اسم كل مادة أضفتها، أو احذف السطر الفارغ.'); return; }
-    if (onboarding && data.subjects.length === 0 && starters.length === 0) { setValidation('أضف مادة أو مشروعًا أو مشروعًا واحدًا للبدء.'); return; }
+    if (onboarding && data.subjects.length === 0 && starters.length === 0) { setValidation('أضف مشروعًا أو مشروعًا واحدًا للبدء.'); return; }
     const ok = await run(async () => {
       if (starters.length) {
         check(await db().from('subjects').upsert(starters.map((item, index) => ({ id: item.id, user_id: userId, title: item.title.trim(), color: colors[index % colors.length] }))));
-        const exams = starters.filter(item => item.examOn).map(item => ({ id: item.examId, user_id: userId, subject_id: item.id, title: item.examTitle.trim() || 'اختبار', exam_on: item.examOn, topic_ids: [] }));
+        const exams = starters.filter(item => item.examOn).map(item => ({ id: item.examId, user_id: userId, subject_id: item.id, title: item.examTitle.trim() || 'تسليم', exam_on: item.examOn, topic_ids: [] }));
         if (exams.length) check(await db().from('exams').upsert(exams));
       }
       check(await db().from('profiles').upsert({ user_id: userId, display_name: name.trim(), weekly_minutes: minutes.map((value, index) => rest.includes(index) ? 0 : Number(value)), rest_days: rest, onboarded: true }));
@@ -57,19 +57,19 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
     <header className="section-heading"><div><p className="eyebrow">{onboarding ? 'خطوة بسيطة قبل البداية' : 'على مقاس يومك'}</p><h1>{onboarding ? 'خلّنا نرتّب البداية' : 'الإعدادات'}</h1><p className="muted">اضبط وقتك، وعدّله متى احتجت.</p></div></header>
     <form onSubmit={save} className="stack">
       <section className="panel stack">
-        <h2>{onboarding ? '١. أنت وموادك' : 'بياناتك'}</h2>
+        <h2>{onboarding ? '١. مشروعك الأول' : 'بياناتك'}</h2>
         <label className="field">وش نناديك؟ <span className="muted">اختياري</span><input value={name} onChange={event => setName(event.target.value)} maxLength={80} autoComplete="given-name" placeholder="اسمك" /></label>
         {onboarding && <>
-          {data.subjects.length > 0 && <p className="muted">موادك المسجلة: {data.subjects.map(subject => subject.title).join('، ')}</p>}
+          {data.subjects.length > 0 && <p className="muted">مشاريعك: {data.subjects.map(subject => subject.title).join('، ')}</p>}
           {starters.map((item, index) => <div className="subject-card stack" key={item.id}>
-            <div className="row"><h3>المادة {index + 1}</h3><button className="button ghost small" type="button" onClick={() => setStarters(list => list.filter(value => value.id !== item.id))} aria-label={`حذف سطر المادة ${index + 1}`}><X size={18} /></button></div>
-            <label className="field">اسم المادة أو المشروع<input required value={item.title} maxLength={120} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, title: event.target.value } : value))} placeholder="مثل: بحوث العمليات" /></label>
+            <div className="row"><h3>المشروع {index + 1}</h3><button className="button ghost small" type="button" onClick={() => setStarters(list => list.filter(value => value.id !== item.id))} aria-label={`حذف سطر المشروع ${index + 1}`}><X size={18} /></button></div>
+            <label className="field">اسم المشروع<input required value={item.title} maxLength={120} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, title: event.target.value } : value))} placeholder="مثل: تقرير الأسبوع" /></label>
             <div className="field-grid">
-              <label className="field">اسم الاختبار <span className="muted">اختياري</span><input value={item.examTitle} maxLength={120} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, examTitle: event.target.value } : value))} /></label>
-              <label className="field">موعد الاختبار <span className="muted">إذا تعرفه</span><input type="date" value={item.examOn} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, examOn: event.target.value } : value))} /></label>
+              <label className="field">عنوان الموعد <span className="muted">اختياري</span><input value={item.examTitle} maxLength={120} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, examTitle: event.target.value } : value))} /></label>
+              <label className="field">موعد التسليم <span className="muted">إذا تعرفه</span><input type="date" value={item.examOn} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, examOn: event.target.value } : value))} /></label>
             </div>
           </div>)}
-          <button className="button ghost" type="button" onClick={() => setStarters(list => [...list, newStarter()])}><Plus size={18} /> أضف مادة أو مشروعًا</button>
+          <button className="button ghost" type="button" onClick={() => setStarters(list => [...list, newStarter()])}><Plus size={18} /> أضف مشروعًا</button>
           <p className="muted">يمكنك إضافة الملفات والمهام بعد الإعداد.</p>
         </>}
       </section>
@@ -86,7 +86,7 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
       {validation && <p className="notice danger" role="alert">{validation}</p>}
       <div className="row"><button className="button primary" disabled={busy} type="submit"><Save size={18} /> {busy ? 'جارٍ الحفظ…' : onboarding ? 'احفظ ونبدأ' : 'احفظ الإعدادات'}</button></div>
     </form>
-    {!onboarding && <section className="panel stack"><div className="row"><Download size={22} /><h2>نسخة من بياناتك</h2></div><p className="muted">تصدير JSON يشمل موادك وخطتك وجلساتك وتقييماتك وإعداداتك، مع بيانات الملفات. ملفات PDF نفسها تنزّلها من «موادي». التصدير نسخة للقراءة والحفظ؛ الاستيراد غير متاح في هذه النسخة.</p><div><button className="button ghost" onClick={exportData} disabled={busy}><Download size={18} /> صدّر بياناتي</button></div></section>}
+    {!onboarding && <section className="panel stack"><div className="row"><Download size={22} /><h2>نسخة من بياناتك</h2></div><p className="muted">تصدير JSON يشمل موادك وخطتك وجلساتك وتقييماتك وإعداداتك، مع بيانات الملفات. ملفات PDF نفسها تنزّلها من «المشاريع». التصدير نسخة للقراءة والحفظ؛ الاستيراد غير متاح في هذه النسخة.</p><div><button className="button ghost" onClick={exportData} disabled={busy}><Download size={18} /> صدّر بياناتي</button></div></section>}
     <section className="panel stack"><div className="row"><Smartphone size={22} /><h2>مركز على شاشتك الرئيسية</h2></div><p className="muted">على iPhone أو iPad: افتح الموقع في Safari، ثم مشاركة ← إضافة إلى الشاشة الرئيسية. على المتصفحات الداعمة استخدم «تثبيت التطبيق» من قائمة المتصفح.</p><p className="muted">الحفظ والمزامنة يحتاجان اتصالًا بالإنترنت. التوقيت يستعاد عند الرجوع للتطبيق؛ تنبيه الصوت بالخلفية على iOS غير مضمون.</p></section>
   </div>;
 }
