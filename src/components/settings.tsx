@@ -18,6 +18,7 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
   const [rest, setRest] = useState<number[]>(initial?.rest_days ?? []);
   const [starters, setStarters] = useState<Starter[]>([]);
   const [validation, setValidation] = useState('');
+  const [dailyTime,setDailyTime]=useState('');
   const onboarding = !initial?.onboarded;
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -26,7 +27,7 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
     const incomplete = minutes.some((value, index) => !rest.includes(index) && (value.trim() === '' || !Number.isInteger(Number(value)) || Number(value) < 0 || Number(value) > 1440));
     if (incomplete) { setValidation('حدّد وقتك لكل يوم بالدقائق، أو علّمه يوم راحة. المدى من ٠ إلى ١٤٤٠ دقيقة.'); return; }
     if (starters.some(item => !item.title.trim())) { setValidation('اكتب اسم كل مادة أضفتها، أو احذف السطر الفارغ.'); return; }
-    if (onboarding && data.subjects.length === 0 && starters.length === 0) { setValidation('أضف مادة واحدة على الأقل عشان نبدأ.'); return; }
+    if (onboarding && data.subjects.length === 0 && starters.length === 0) { setValidation('أضف مادة أو مشروعًا أو مشروعًا واحدًا للبدء.'); return; }
     const ok = await run(async () => {
       if (starters.length) {
         check(await db().from('subjects').upsert(starters.map((item, index) => ({ id: item.id, user_id: userId, title: item.title.trim(), color: colors[index % colors.length] }))));
@@ -53,7 +54,7 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
   }
 
   return <div className="stack settings-view">
-    <header className="section-heading"><div><p className="eyebrow">{onboarding ? 'خطوة بسيطة قبل البداية' : 'على مقاس يومك'}</p><h1>{onboarding ? 'خلّنا نرتّب البداية' : 'الإعدادات'}</h1><p className="muted">وقتك وموادك أنت تحددها. تقدر تعدّلها بأي وقت.</p></div></header>
+    <header className="section-heading"><div><p className="eyebrow">{onboarding ? 'خطوة بسيطة قبل البداية' : 'على مقاس يومك'}</p><h1>{onboarding ? 'خلّنا نرتّب البداية' : 'الإعدادات'}</h1><p className="muted">اضبط وقتك، وعدّله متى احتجت.</p></div></header>
     <form onSubmit={save} className="stack">
       <section className="panel stack">
         <h2>{onboarding ? '١. أنت وموادك' : 'بياناتك'}</h2>
@@ -62,19 +63,19 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
           {data.subjects.length > 0 && <p className="muted">موادك المسجلة: {data.subjects.map(subject => subject.title).join('، ')}</p>}
           {starters.map((item, index) => <div className="subject-card stack" key={item.id}>
             <div className="row"><h3>المادة {index + 1}</h3><button className="button ghost small" type="button" onClick={() => setStarters(list => list.filter(value => value.id !== item.id))} aria-label={`حذف سطر المادة ${index + 1}`}><X size={18} /></button></div>
-            <label className="field">اسم المادة<input required value={item.title} maxLength={120} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, title: event.target.value } : value))} placeholder="مثل: بحوث العمليات" /></label>
+            <label className="field">اسم المادة أو المشروع<input required value={item.title} maxLength={120} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, title: event.target.value } : value))} placeholder="مثل: بحوث العمليات" /></label>
             <div className="field-grid">
               <label className="field">اسم الاختبار <span className="muted">اختياري</span><input value={item.examTitle} maxLength={120} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, examTitle: event.target.value } : value))} /></label>
               <label className="field">موعد الاختبار <span className="muted">إذا تعرفه</span><input type="date" value={item.examOn} onChange={event => setStarters(list => list.map(value => value.id === item.id ? { ...value, examOn: event.target.value } : value))} /></label>
             </div>
           </div>)}
-          <button className="button ghost" type="button" onClick={() => setStarters(list => [...list, newStarter()])}><Plus size={18} /> أضف مادة</button>
-          <p className="muted">تضيف الجزئيات وملفات المادة، وتحدد نطاق الاختبار، من «موادي» بعد الإعداد.</p>
+          <button className="button ghost" type="button" onClick={() => setStarters(list => [...list, newStarter()])}><Plus size={18} /> أضف مادة أو مشروعًا</button>
+          <p className="muted">يمكنك إضافة الملفات والمهام بعد الإعداد.</p>
         </>}
       </section>
       <section className="panel stack">
         <div><h2>{onboarding ? '٢. وقتك وأيام الراحة' : 'وقتك خلال الأسبوع'}</h2><p className="muted">اكتب الدقائق المتاحة فعلًا. لن نملأ يومك بأكثر منها. الصفر يعني ما عندك وقت في هذا اليوم.</p></div>
-        <div className="availability-grid">
+        <div className="row wrap"><label className="field">وقت يومي موحّد<div className="input-suffix"><input type="number" min="0" max="1440" inputMode="numeric" value={dailyTime} onChange={e=>setDailyTime(e.target.value)} placeholder="دقيقة"/><span>دقيقة</span></div></label><button type="button" className="button ghost" disabled={dailyTime.trim()===''||!Number.isInteger(Number(dailyTime))||Number(dailyTime)<0||Number(dailyTime)>1440} onClick={()=>setMinutes(days.map((_,i)=>rest.includes(i)?'0':dailyTime))}>طبّق على أيام العمل</button></div><div className="availability-grid">
           {days.map((day, index) => <div className="availability-day" key={day}>
             <label className="field" htmlFor={`minutes-${index}`}>{day}<div className="input-suffix"><input id={`minutes-${index}`} type="number" min="0" max="1440" step="1" inputMode="numeric" disabled={rest.includes(index)} value={rest.includes(index) ? '0' : minutes[index]} onChange={event => setMinutes(values => values.map((value, current) => current === index ? event.target.value : value))} placeholder="دقيقة" required={!rest.includes(index)} /><span>دقيقة</span></div></label>
             <label className="checkbox-row"><input type="checkbox" checked={rest.includes(index)} onChange={event => setRest(values => event.target.checked ? [...values, index] : values.filter(value => value !== index))} /> يوم راحة</label>
