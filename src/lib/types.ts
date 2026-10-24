@@ -6,7 +6,7 @@ export interface Topic { id:string; user_id:string; subject_id:string|null; titl
 export interface Exam { id:string; user_id:string; subject_id:string; title:string; exam_on:string; topic_ids:string[] }
 export interface StudyDocument { id:string; user_id:string; subject_id:string; name:string; storage_path:string; pages:number|null }
 export interface Task { id:string; user_id:string; topic_id:string; day:string; minutes:number; position:number; status:'pending'|'done'|'deferred'; manual:boolean; kind:'study'|'review' }
-export interface FocusSession { id:string; user_id:string; topic_id:string|null; task_id:string|null; kind:'focus'|'break'; status:'running'|'paused'|'completed'|'cancelled'; duration_seconds:number; elapsed_seconds:number; started_at:string|null; completed_at:string|null; version:number }
+export interface FocusSession { id:string; user_id:string; topic_id:string|null; task_id:string|null; office_task_id?:string|null; kind:'focus'|'break'; status:'running'|'paused'|'completed'|'cancelled'; duration_seconds:number; elapsed_seconds:number; started_at:string|null; completed_at:string|null; version:number }
 export interface Assessment { id:string; user_id:string; session_id:string; topic_id:string|null; understanding:Understanding; evidence:Evidence; note:string; created_at:string }
 export interface SessionClosure { id:string; user_id:string; session_id:string; topic_id:string|null; outcome:'done'|'blocked'|'skipped'; note:string; created_at:string }
 export interface StudyData { profile:Profile|null; subjects:Subject[]; topics:Topic[]; exams:Exam[]; documents:StudyDocument[]; tasks:Task[]; sessions:FocusSession[]; assessments:Assessment[]; session_closures:SessionClosure[] }
