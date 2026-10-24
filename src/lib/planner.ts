@@ -13,6 +13,7 @@ const HORIZON_DAYS = 30;
 const CHUNK_MINUTES = 25;
 
 function nextExam(topic: Topic, exams: Exam[], today: string): Exam | undefined {
+  if(topic.mode==='work') return undefined;
   return exams
     .filter(exam => exam.subject_id === topic.subject_id && exam.exam_on >= today &&
       (exam.topic_ids.length === 0 || exam.topic_ids.includes(topic.id)))
@@ -42,7 +43,7 @@ export function proposePlan(data: StudyData, today: string): PlanProposal {
   // replace_plan keeps work in a live session or completed session awaiting assessment.
   const activeTaskIds = new Set(data.sessions
     .filter(session => session.status === 'running' || session.status === 'paused' ||
-      (session.status === 'completed' && session.kind === 'focus' && !data.assessments.some(assessment => assessment.session_id === session.id)))
+      (session.status === 'completed' && session.kind === 'focus' && !data.assessments.some(assessment => assessment.session_id === session.id) && !data.session_closures.some(closure => closure.session_id === session.id)))
     .map(session => session.task_id).filter(Boolean));
   const retained = data.tasks.filter(task => task.manual || task.status !== 'pending' || activeTaskIds.has(task.id));
   const topicIds = new Set(data.topics.map(topic => topic.id));
@@ -64,6 +65,7 @@ export function proposePlan(data: StudyData, today: string): PlanProposal {
   }
 
   const candidates = data.topics.flatMap(topic => {
+    if(topic.mode==='work' && topic.work_state==='done') return [];
     const exam = nextExam(topic, data.exams, today);
     const examDays = exam ? daysUntil(exam.exam_on, today) : null;
     const weak = topic.understanding === 'unclear' || topic.understanding === 'review' || topic.evidence === 'no';
@@ -73,7 +75,7 @@ export function proposePlan(data: StudyData, today: string): PlanProposal {
       .reduce((sum, task) => sum + integerMinutes(task.minutes), 0);
     const studyMinutes = topic.completed ? 0 : Math.max(0, integerMinutes(topic.minutes) - reservedStudy);
     const studied = topic.completed || doneStudy >= integerMinutes(topic.minutes);
-    const isReview = studied && studyMinutes === 0 && (Boolean(topic.review_on) || weak || (topic.completed && !topic.understanding));
+    const isReview = topic.mode==='study' && studied && studyMinutes === 0 && (Boolean(topic.review_on) || weak || (topic.completed && !topic.understanding));
     const reservedReview = retained.filter(task => task.topic_id === topic.id && task.kind === 'review' && task.status !== 'done')
       .reduce((sum, task) => sum + integerMinutes(task.minutes), 0);
     const requestedMinutes = isReview
@@ -83,17 +85,20 @@ export function proposePlan(data: StudyData, today: string): PlanProposal {
     const due = isReview ? topic.review_on || today : today;
     const availableFrom = due > today ? due : today;
     const priority = (examDays !== null ? 2000 / (examDays + 1) : 0)
+      + (topic.mode==='work' && topic.due_on ? 1500 / (Math.max(0,daysUntil(topic.due_on,today))+1) : 0)
+      + (topic.mode==='work' ? topic.priority==='high'?180:topic.priority==='normal'?80:0 : 0)
       + (isReview && due <= today ? 200 : 0)
       + (topic.understanding === 'unclear' ? 180 : topic.understanding === 'review' ? 90 : 0)
       + (topic.evidence === 'no' ? 75 : 0);
     const reasons: string[] = [];
     if (exam) reasons.push(examDays === 0 ? 'اختبارها اليوم' : `باقي ${examDays} يوم على اختبارها`);
+    if (topic.mode==='work' && topic.due_on) reasons.push(topic.due_on<=today?'موعدها وصل':`تسليمها ${topic.due_on}`);
     if (isReview && due <= today) reasons.push('مراجعتها مستحقة');
     if (topic.understanding === 'unclear') reasons.push('سجّلت أنها مو واضحة');
     else if (topic.understanding === 'review') reasons.push('سجّلت أنها تحتاج مراجعة');
     if (topic.evidence === 'no') reasons.push('ما قدرت تحل سؤالًا بدون الحل');
     proposal.reasons[topic.id] = reasons.length ? reasons.join('، و') : isReview
-      ? `مراجعة مقررة في ${due}` : 'جزئية باقي ما خلصتها، وتناسب الوقت المتاح';
+      ? `مراجعة مقررة في ${due}` : topic.mode==='work'?'مهمة تنتظر الإنجاز':'جزئية باقي ما خلصتها، وتناسب الوقت المتاح';
     return [{ topic, exam, priority, requestedMinutes, availableFrom, kind: isReview ? 'review' as const : 'study' as const }];
   }).sort((a, b) => b.priority - a.priority ||
     (a.exam?.exam_on ?? '9999').localeCompare(b.exam?.exam_on ?? '9999') ||
@@ -102,7 +107,7 @@ export function proposePlan(data: StudyData, today: string): PlanProposal {
   for (const candidate of candidates) {
     let unallocated = candidate.requestedMinutes;
     for (const day of days) {
-      if (day < candidate.availableFrom || (candidate.exam && day >= candidate.exam.exam_on)) continue;
+      if (day < candidate.availableFrom || (candidate.exam && day >= candidate.exam.exam_on) || (candidate.topic.mode==='work' && candidate.topic.due_on && candidate.topic.due_on>=today && day>candidate.topic.due_on)) continue;
       let available = remaining.get(day) ?? 0;
       while (unallocated > 0 && available > 0) {
         const minutes = Math.min(CHUNK_MINUTES, unallocated, available);
@@ -125,7 +130,7 @@ export function proposePlan(data: StudyData, today: string): PlanProposal {
         proposal.warnings.push(`«${candidate.topic.title}»: بقي ${unallocated} دقيقة بعد خطة الثلاثين يومًا. الاختبار أبعد من ذلك؛ اقترح خطة جديدة لاحقًا لتغطية الباقي.`);
         continue;
       }
-      const deadline = candidate.exam ? `قبل اختبار «${candidate.exam.title}» في ${candidate.exam.exam_on}` : 'خلال الثلاثين يومًا القادمة';
+      const deadline = candidate.exam ? `قبل اختبار «${candidate.exam.title}» في ${candidate.exam.exam_on}` : candidate.topic.mode==='work'&&candidate.topic.due_on?`قبل تسليم ${candidate.topic.due_on}`:'خلال الثلاثين يومًا القادمة';
       proposal.warnings.push(`الوقت ما يكفي لـ«${candidate.topic.title}»: باقي ${unallocated} دقيقة ${deadline}. رتّب الأولوية أو عدّل وقتك المتاح.`);
     }
   }

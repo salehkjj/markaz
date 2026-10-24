@@ -1,7 +1,7 @@
 import { db, check } from './supabase';
 import type { StudyData } from './types';
 export async function fetchStudyData(userId:string):Promise<StudyData> {
-  const names = ['profiles','subjects','topics','exams','documents','tasks','sessions','assessments'] as const;
+  const names = ['profiles','subjects','topics','exams','documents','tasks','sessions','assessments','session_closures'] as const;
   const results = await Promise.all(names.map(async name => {
     const rows:Record<string,unknown>[]=[];
     for(let from=0;from<=10000;from+=500){
@@ -14,7 +14,7 @@ export async function fetchStudyData(userId:string):Promise<StudyData> {
     }
     throw new Error('تجاوزت البيانات حد التحميل الآمن. لم نعرض بيانات ناقصة.');
   }));
-  return {profile:results[0][0]??null,subjects:results[1],topics:results[2],exams:results[3],documents:results[4],tasks:results[5],sessions:results[6],assessments:results[7]} as unknown as StudyData;
+  return {profile:results[0][0]??null,subjects:results[1],topics:results[2],exams:results[3],documents:results[4],tasks:results[5],sessions:results[6],assessments:results[7],session_closures:results[8]} as unknown as StudyData;
 }
 export function errorMessage(error:unknown):string {
   const message = error instanceof Error ? error.message : typeof error==='object' && error && 'message' in error ? String(error.message) : 'تعذّر الاتصال. جرّب مرة ثانية.';

@@ -7,7 +7,8 @@ import type { FocusSession, StudyData, Task, Topic } from '../src/lib/types';
 const topic = (id: string, patch: Partial<Topic> = {}): Topic => ({
   id, user_id: 'u', subject_id: 's', title: id, chapter: '', minutes: 60,
   document_id: null, page_start: null, page_end: null, completed: false,
-  understanding: null, evidence: null, review_on: null, notes: '', ...patch,
+  understanding: null, evidence: null, review_on: null, notes: '',
+  mode:'study',priority:'normal',due_on:null,work_state:'todo',...patch,
 });
 const task = (id: string, patch: Partial<Task> = {}): Task => ({
   id, user_id: 'u', topic_id: 'a', day: '2026-10-23', minutes: 25,
@@ -15,7 +16,7 @@ const task = (id: string, patch: Partial<Task> = {}): Task => ({
 });
 const data = (patch: Partial<StudyData> = {}): StudyData => ({
   profile: { user_id: 'u', display_name: '', weekly_minutes: [60, 60, 60, 60, 60, 60, 60], rest_days: [], onboarded: true },
-  subjects: [], topics: [topic('a')], documents: [], exams: [], tasks: [], sessions: [], assessments: [], ...patch,
+  subjects: [], topics: [topic('a')], documents: [], exams: [], tasks: [], sessions: [], assessments: [], session_closures:[], ...patch,
 });
 const session = (patch: Partial<FocusSession> = {}): FocusSession => ({
   id: 'one', user_id: 'u', topic_id: null, task_id: null, kind: 'focus', status: 'running',
@@ -61,6 +62,14 @@ describe('timestamp timer restoration', () => {
 });
 
 describe('capacity-constrained planner', () => {
+  it('prioritizes work deadlines without exceeding capacity, and ignores completed work',()=>{
+    const source=data({topics:[topic('a',{mode:'work',subject_id:null,priority:'high',due_on:'2026-10-23',minutes:40}),topic('b',{mode:'work',subject_id:null,work_state:'done',completed:true})]});
+    source.profile!.weekly_minutes=[30,30,30,30,30,30,30];
+    const plan=proposePlan(source,'2026-10-23');
+    expect(plan.tasks.every(task=>task.topic_id==='a'&&task.day==='2026-10-23')).toBe(true);
+    expect(plan.tasks.reduce((total,task)=>total+task.minutes,0)).toBe(30);
+    expect(plan.warnings.join(' ')).toContain('الوقت ما يكفي');
+  });
   it('does not infer available hours or schedule on a rest day', () => {
     const source = data();
     source.profile!.weekly_minutes = [0, 0, 0, 0, 0, 0, 0];

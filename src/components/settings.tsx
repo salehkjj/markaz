@@ -27,10 +27,9 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
     const incomplete = minutes.some((value, index) => !rest.includes(index) && (value.trim() === '' || !Number.isInteger(Number(value)) || Number(value) < 0 || Number(value) > 1440));
     if (incomplete) { setValidation('حدّد وقتك لكل يوم بالدقائق، أو علّمه يوم راحة. المدى من ٠ إلى ١٤٤٠ دقيقة.'); return; }
     if (starters.some(item => !item.title.trim())) { setValidation('اكتب اسم كل مادة أضفتها، أو احذف السطر الفارغ.'); return; }
-    if (onboarding && data.subjects.length === 0 && starters.length === 0) { setValidation('أضف مشروعًا أو مشروعًا واحدًا للبدء.'); return; }
     const ok = await run(async () => {
       if (starters.length) {
-        check(await db().from('subjects').upsert(starters.map((item, index) => ({ id: item.id, user_id: userId, title: item.title.trim(), color: colors[index % colors.length] }))));
+        check(await db().from('subjects').upsert(starters.map((item, index) => ({ id: item.id, user_id: userId, title: item.title.trim(), color: colors[index % colors.length],kind:'work' }))));
         const exams = starters.filter(item => item.examOn).map(item => ({ id: item.examId, user_id: userId, subject_id: item.id, title: item.examTitle.trim() || 'تسليم', exam_on: item.examOn, topic_ids: [] }));
         if (exams.length) check(await db().from('exams').upsert(exams));
       }
@@ -38,6 +37,8 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
     }, onboarding ? 'تم الإعداد. نبدأ بالجزئيات.' : 'انحفظت إعداداتك.');
     if (ok) { setStarters([]); onDone?.(); }
   }
+
+  async function startNow(){const ok=await run(async()=>{check(await db().from('profiles').upsert({user_id:userId,display_name:name.trim(),weekly_minutes:[0,0,0,0,0,0,0],rest_days:[],onboarded:true}));},'جهزنا مساحتك. أضف أول مهمة.');if(ok)onDone?.();}
 
   async function exportData() {
     await run(async () => {
@@ -84,7 +85,7 @@ export function Settings({ data, userId, run, busy, onDone }: ViewProps & { onDo
         <p className="muted">كل المواعيد والستريك حسب توقيت الرياض. تغيير الوقت المتاح لا يعيد ترتيب خطتك تلقائيًا؛ راجع «خطتي» بعدها.</p>
       </section>
       {validation && <p className="notice danger" role="alert">{validation}</p>}
-      <div className="row"><button className="button primary" disabled={busy} type="submit"><Save size={18} /> {busy ? 'جارٍ الحفظ…' : onboarding ? 'احفظ ونبدأ' : 'احفظ الإعدادات'}</button></div>
+      <div className="row wrap"><button className="button primary" disabled={busy} type="submit"><Save size={18} /> {busy ? 'جارٍ الحفظ…' : onboarding ? 'احفظ ونبدأ' : 'احفظ الإعدادات'}</button>{onboarding&&<button className="button ghost" type="button" disabled={busy} onClick={()=>void startNow()}>ابدأ بمهمة الآن</button>}</div>
     </form>
     {!onboarding && <section className="panel stack"><div className="row"><Download size={22} /><h2>نسخة من بياناتك</h2></div><p className="muted">تصدير JSON يشمل موادك وخطتك وجلساتك وتقييماتك وإعداداتك، مع بيانات الملفات. ملفات PDF نفسها تنزّلها من «المشاريع». التصدير نسخة للقراءة والحفظ؛ الاستيراد غير متاح في هذه النسخة.</p><div><button className="button ghost" onClick={exportData} disabled={busy}><Download size={18} /> صدّر بياناتي</button></div></section>}
     <section className="panel stack"><div className="row"><Smartphone size={22} /><h2>مركز على شاشتك الرئيسية</h2></div><p className="muted">على iPhone أو iPad: افتح الموقع في Safari، ثم مشاركة ← إضافة إلى الشاشة الرئيسية. على المتصفحات الداعمة استخدم «تثبيت التطبيق» من قائمة المتصفح.</p><p className="muted">الحفظ والمزامنة يحتاجان اتصالًا بالإنترنت. التوقيت يستعاد عند الرجوع للتطبيق؛ تنبيه الصوت بالخلفية على iOS غير مضمون.</p></section>
