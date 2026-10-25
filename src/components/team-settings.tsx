@@ -6,6 +6,7 @@ import {BASE_PATH} from '@/lib/base-path';
 import type {Office,Invite} from '@/lib/team';
 import type {TeamViewProps} from './team-app';
 import {VintageIcon} from './vintage-icon';
+import {sendOfficeInvite} from '@/lib/send-office-invite';
 
 type CurrentLink={id:string;email:string;url:string;token:string};
 export function OfficeSettings({office,data,userId,busy,run,offices,refreshOffices,onPersonal}:TeamViewProps&{offices:Office[];refreshOffices:()=>Promise<void>;onPersonal:()=>void}){
@@ -13,7 +14,7 @@ export function OfficeSettings({office,data,userId,busy,run,offices,refreshOffic
  const owner=office.owner_id===userId;
  const linkFor=(token:string)=>`${location.origin}${BASE_PATH}/?invite=${encodeURIComponent(token)}`;
  const showLink=(id:string,recipient:string,token:string):CurrentLink=>{const link={id,email:recipient,url:linkFor(token),token};setCurrentLink(link);setLinkFeedback('الرابط جاهز. يمكنك نسخه أو إرساله بالبريد.');return link;};
- async function sendEmail(link:CurrentLink){setSending(true);setLinkFeedback('جارٍ إرسال الدعوة بالبريد…');try{const {data,error}=await db().functions.invoke('send-office-invite',{body:{invite_id:link.id,token:link.token}});if(error){let detail=error.message;const context=error.context as Response|undefined;if(context?.json){try{const body=await context.json();detail=body.message??detail;}catch{}}throw new Error(detail);}if(!data?.accepted)throw new Error('لم يؤكد مزود البريد قبول الرسالة.');setLinkFeedback('قبل مزود البريد رسالة الدعوة. تأكد من وصولها للبريد المدعو.');}catch(e){setLinkFeedback(`لم يُرسل البريد: ${e instanceof Error?e.message:'جرّب لاحقًا'}. الرابط ظاهر للنسخ اليدوي.`);}finally{setSending(false);}}
+ async function sendEmail(link:CurrentLink){setSending(true);setLinkFeedback('جارٍ إرسال الدعوة بالبريد…');try{await sendOfficeInvite(link.id,link.token);setLinkFeedback('قبلت خدمة Supabase طلب الإرسال. تأكد من وصول الرسالة للبريد المدعو؛ الرابط متاح للنسخ أيضًا.');}catch(e){setLinkFeedback(`لم تقبل خدمة البريد طلب الإرسال: ${e instanceof Error?e.message:'جرّب لاحقًا'}. الرابط ظاهر للنسخ اليدوي.`);}finally{setSending(false);}}
  async function invite(e:FormEvent){e.preventDefault();if(!owner)return;const recipient=email.trim().toLowerCase();let result:unknown=null;const okay=await run(async()=>{result=check(await db().rpc('invite_office_member',{p_office:office.id,p_email:recipient})).data;},'انحفظ رابط الدعوة.');if(okay&&result){const created=result as {id:string;token:string};const link=showLink(created.id,recipient,created.token);setEmail('');await sendEmail(link);}}
  async function renew(invite:Invite){if(!owner)return;let result:unknown=null;const okay=await run(async()=>{result=check(await db().rpc('renew_office_invite',{p_invite:invite.id})).data;},'تجدّد رابط الدعوة؛ الرابط السابق لم يعد صالحًا.');if(okay&&result){const created=result as {id:string;token:string};showLink(created.id,invite.email,created.token);}}
  async function copy(){if(!currentLink)return;try{if(!navigator.clipboard?.writeText)throw new Error('unavailable');await navigator.clipboard.writeText(currentLink.url);setLinkFeedback('نُسخ الرابط. أرسله للبريد المخصص.');}catch{setLinkFeedback('تعذر النسخ تلقائيًا. حدّد الرابط من الحقل وانسخه يدويًا.');}}
