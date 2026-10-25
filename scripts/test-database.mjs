@@ -126,8 +126,13 @@ try {
   await query(`update public.office_invites set expires_at=now()-interval '1 second' where id=$1`,[expired.id]);
   await user(A);
   const invite=(await query(`select public.invite_office_member($1,'b@example.com') as result`,[office]))[0].result;
+  await expectReject(()=>query(`select public.claim_office_invite_email($1,gen_random_uuid())`,[invite.id]),'wrong token cannot claim email recipient');
+  const delivery=(await query(`select public.claim_office_invite_email($1,$2) as result`,[invite.id,invite.token]))[0].result;
+  assert.equal(delivery.email,'b@example.com','email delivery targets the invited address only');
+  await expectMessage(()=>query(`select public.claim_office_invite_email($1,$2)`,[invite.id,invite.token]),'انتظر دقيقة');
   await expectMessage(()=>query(`select public.accept_office_invite($1)`,[invite.token]),'الدعوة لبريد آخر');
   await user(B);
+  await expectReject(()=>query(`select public.claim_office_invite_email($1,$2)`,[invite.id,invite.token]),'non-owner cannot send an invitation');
   assert.equal((await query(`select count(*)::integer as n from public.offices`))[0].n,0,'uninvited user cannot see office');
   await expectMessage(()=>query(`select public.accept_office_invite($1)`,[revoke.token]),'جُدّد');
   await expectMessage(()=>query(`select public.accept_office_invite($1)`,[renewed.token]),'ألغيت');
@@ -150,6 +155,7 @@ try {
   await expectReject(()=>query(`select public.renew_office_invite($1)`,[invite.id]),'used invitation cannot be renewed');
   await user(A);
   await expectMessage(()=>query(`select public.renew_office_invite($1)`,[invite.id]),'استُخدمت');
+  await expectMessage(()=>query(`select public.claim_office_invite_email($1,$2)`,[invite.id,invite.token]),'الدعوة لم تعد صالحة');
   await user(B);
   const teamTask=(await query(`insert into public.office_tasks(office_id,project_id,title,assignee_id,created_by,goal_week_start) values($1,$2,'إرسال العرض',$3,$3,date_trunc('week',now() at time zone 'Asia/Riyadh')::date) returning id`,[office,teamProject,B]))[0].id;
   await query(`update public.office_tasks set status='blocked',blocker_reason='نحتاج اعتماد',blocked_by=$1 where id=$2`,[A,teamTask]);
