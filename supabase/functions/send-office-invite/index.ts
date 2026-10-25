@@ -22,9 +22,10 @@ Deno.serve(async request=>{
  const {data:invite,error:claimError}=await client.rpc('claim_office_invite_email',{p_invite:body.invite_id,p_token:body.token});
  if(claimError||!invite)return reply(403,claimError?.message??'الدعوة غير متاحة للإرسال.');
  const recipient=String(invite.email);
+ const inviteName=recipient.split('@')[0].replace(/[._+-]+/g,' ').replace(/[<>]/g,'').trim().slice(0,60)||recipient;
  const inviteUrl=`${site}?invite=${encodeURIComponent(body.token!)}`;
  const mailClient=createClient(url,anon,{auth:{persistSession:false}});
- const {error:mailError}=await mailClient.auth.signInWithOtp({email:recipient,options:{emailRedirectTo:inviteUrl,shouldCreateUser:true}});
+ const {error:mailError}=await mailClient.auth.signInWithOtp({email:recipient,options:{emailRedirectTo:inviteUrl,shouldCreateUser:true,data:{invite_name:inviteName}}});
  if(mailError){console.error('Invitation mail rejected by Auth SMTP',mailError.status,mailError.code);return reply(502,mailError.message.includes('not authorized')?'بريد Supabase الافتراضي لا يرسل لهذا العنوان. اضبط SMTP مجانيًا في إعدادات Auth.':'لم تقبل خدمة البريد إرسال الدعوة. الرابط ظاهر للنسخ اليدوي.');}
  return new Response(JSON.stringify({accepted:true}),{status:200,headers});
 });
