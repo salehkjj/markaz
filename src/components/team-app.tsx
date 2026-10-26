@@ -60,10 +60,10 @@ export function TeamApp(){
  useEffect(()=>{setData(null);if(!officeId)return;void refresh().catch(()=>{});const visible=()=>{if(document.visibilityState==='visible'&&!lock.current)void refresh().catch(()=>{});};const interval=setInterval(visible,60000);window.addEventListener('focus',visible);document.addEventListener('visibilitychange',visible);return()=>{clearInterval(interval);window.removeEventListener('focus',visible);document.removeEventListener('visibilitychange',visible);};},[officeId,refresh]);
  const run=useCallback(async(action:()=>Promise<unknown>,message='انحفظ على المكتب.',scope:RefreshScope='full')=>{
   if(lock.current)return false;
+  if(!navigator.onLine){setNotice('');setError(errorMessage(new Error('offline')));return false;}
   lock.current=true;seq.current++;setBusy(true);setError('');setNotice('');
   const reload=()=>scope==='full'?refresh(true):refreshSlice(scope);
   try{
-   if(!navigator.onLine)throw new Error('offline');
    await action();
   }catch(e){
    try{await reload();}catch{}
