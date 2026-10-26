@@ -9,7 +9,7 @@ import {VintageIcon} from './vintage-icon';
 import {OfficeView} from './team-office-view';
 import {supabase,db,check} from '@/lib/supabase';
 import {errorMessage} from '@/lib/data';
-import {listOffices,loadTeam,type Office,type TeamData} from '@/lib/team';
+import {listOffices,loadTeam,type Office,type OfficeDashboard,type TeamData} from '@/lib/team';
 import {BASE_PATH} from '@/lib/base-path';
 const ProjectsView=dynamic(()=>import('./team-projects-view').then(m=>m.ProjectsView),{loading:()=> <div className="panel" role="status">نفتح المشاريع…</div>});
 const DecisionsView=dynamic(()=>import('./team-decisions-view').then(m=>m.DecisionsView),{loading:()=> <div className="panel" role="status">نفتح القرارات…</div>});
@@ -18,7 +18,8 @@ const OfficeSettings=dynamic(()=>import('./team-settings').then(m=>m.OfficeSetti
 const TeamFocus=dynamic(()=>import('./team-focus').then(m=>m.TeamFocus),{loading:()=> <div className="panel" role="status">نفتح المؤقت…</div>});
 type Page='office'|'my'|'projects'|'decisions'|'files'|'settings';
 export type ProjectSection='tasks'|'decisions'|'files';
-export type TeamViewProps={office:Office;data:TeamData;userId:string;busy:boolean;run:(action:()=>Promise<unknown>,message?:string)=>Promise<boolean>;refresh:()=>Promise<void>;onFocus:(taskId:string)=>void;onPage:(page:Page)=>void;onProject?:(id:string,section?:ProjectSection)=>void;onTask?:(id:string)=>void};
+export type RefreshScope='full'|'tasks'|'projects'|'decisions'|'assets';
+export type TeamViewProps={office:Office;data:TeamData;userId:string;busy:boolean;run:(action:()=>Promise<unknown>,message?:string,scope?:RefreshScope)=>Promise<boolean>;refresh:()=>Promise<void>;onFocus:(taskId:string)=>void;onPage:(page:Page)=>void;onProject?:(id:string,section?:ProjectSection)=>void;onTask?:(id:string)=>void};
 const nav=[['office','المكتب','desk'],['my','مهامي','checklist'],['projects','المشاريع','briefcase']] as const;
 export function TeamApp(){
  const [auth,setAuth]=useState<Session|null>(null),[authReady,setAuthReady]=useState(!supabase),[recovery,setRecovery]=useState(false);
@@ -37,22 +38,42 @@ export function TeamApp(){
  useEffect(()=>{if(!userId||!profileName||acceptingInvite.current)return;const token=localStorage.getItem('markaz-office-invite');if(!token)return;acceptingInvite.current=true;void (async()=>{try{const result=check(await db().rpc('accept_office_invite',{p_token:token}));localStorage.removeItem('markaz-office-invite');history.replaceState(null,'',`${BASE_PATH}/`);await refreshOffices();setOfficeId(result.data as string);setPage('office');setError('');setNotice('انضممت للمكتب.');}catch(e){const message=errorMessage(e);if(/غير صحيح|جُدّد|ألغيت|استُخدمت|انتهت صلاحية/.test(message)){localStorage.removeItem('markaz-office-invite');history.replaceState(null,'',`${BASE_PATH}/`);}setError(message);}finally{acceptingInvite.current=false;}})();},[userId,profileName,refreshOffices]);
  const office=offices.find(o=>o.id===officeId);
  const refresh=useCallback((force=false):Promise<void>=>{if(!officeId||!userId)return Promise.resolve();if(inflight.current&&!force)return inflight.current;if(lock.current&&!force)return Promise.resolve();const id=++seq.current;setLoading(true);const promise=(async()=>{try{const result=await loadTeam(officeId,userId,limit);if(id!==seq.current||currentUser.current!==userId)return;setData(result);setDataOfficeId(officeId);setSaved(new Date());setError('');}catch(e){if(id===seq.current)setError(errorMessage(e));throw e;}finally{if(id===seq.current)setLoading(false);}})();inflight.current=promise;void promise.finally(()=>{if(inflight.current===promise)inflight.current=null;}).catch(()=>{});return promise;},[officeId,userId,limit]);
+ const refreshSlice=useCallback(async(scope:Exclude<RefreshScope,'full'>)=>{
+  if(!officeId||!userId)return;
+  const request=++seq.current;
+  const table={tasks:'office_tasks',projects:'office_projects',decisions:'office_decisions',assets:'office_assets'}[scope];
+  const rowsQuery=db().from(table).select('*').eq('office_id',officeId);
+  const rowsPromise=scope==='projects'?rowsQuery.limit(200):rowsQuery.order('created_at',{ascending:false}).range(0,limit);
+  const [rowsResult,dashboardResult]=await Promise.all([rowsPromise,scope==='assets'?Promise.resolve(null):db().rpc('office_dashboard',{p_office:officeId})]);
+  const rows=check(rowsResult).data??[];
+  const dashboard=dashboardResult?check(dashboardResult).data as OfficeDashboard:null;
+  if(request!==seq.current||currentUser.current!==userId)return;
+  setData(old=>{
+   if(!old)return old;
+   const next={...old,[scope]:rows};
+   if(dashboard)next.dashboard=dashboard;
+   if(scope!=='projects')next.more={...old.more,[scope]:rows.length>limit};
+   return next as TeamData;
+  });
+  setSaved(new Date());setError('');
+ },[officeId,userId,limit]);
  useEffect(()=>{setData(null);if(!officeId)return;void refresh().catch(()=>{});const visible=()=>{if(document.visibilityState==='visible'&&!lock.current)void refresh().catch(()=>{});};const interval=setInterval(visible,60000);window.addEventListener('focus',visible);document.addEventListener('visibilitychange',visible);return()=>{clearInterval(interval);window.removeEventListener('focus',visible);document.removeEventListener('visibilitychange',visible);};},[officeId,refresh]);
- const run=useCallback(async(action:()=>Promise<unknown>,message='انحفظ على المكتب.')=>{
+ const run=useCallback(async(action:()=>Promise<unknown>,message='انحفظ على المكتب.',scope:RefreshScope='full')=>{
   if(lock.current)return false;
   lock.current=true;seq.current++;setBusy(true);setError('');setNotice('');
+  const reload=()=>scope==='full'?refresh(true):refreshSlice(scope);
   try{
    if(!navigator.onLine)throw new Error('offline');
    await action();
   }catch(e){
-   try{await refresh(true);}catch{}
+   try{await reload();}catch{}
    setError(`ما تأكدنا من حفظ التغيير. ${errorMessage(e)}`);
    setBusy(false);lock.current=false;return false;
   }
   setNotice(message);
-  try{await refresh(true);}catch{setError('انحفظ التغيير، لكن تعذر تحديث العرض. اضغط «تحديث المكتب» لرؤية أحدث البيانات.');}
+  try{await reload();}catch{setError('انحفظ التغيير، لكن تعذر تحديث العرض. اضغط «تحديث المكتب» لرؤية أحدث البيانات.');}
   setBusy(false);lock.current=false;return true;
- },[refresh]);
+ },[refresh,refreshSlice]);
  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),6500);return()=>clearTimeout(timer);},[notice]);
  async function createOffice(e:FormEvent){e.preventDefault();if(!draftName.trim())return;const okay=await run(async()=>{check(await db().rpc('create_office',{p_name:draftName.trim(),p_project:draftProject.trim()||null,p_goal:draftGoal.trim()||null}));await refreshOffices();},'انفتح المكتب.');if(okay){setDraftName('');setDraftProject('');setDraftGoal('');}}
  if(!authReady)return <main className="loading-screen">نفتح مركز…</main>;
