@@ -18,12 +18,12 @@ export async function fetchPersonalArchive(userId:string) {
 }
 export function errorMessage(error:unknown):string {
   const message = error instanceof Error ? error.message : typeof error==='object' && error && 'message' in error ? String(error.message) : 'تعذّر الاتصال. جرّب مرة ثانية.';
+  if(typeof error==='object'&&error&&'code' in error&&error.code==='PGRST116') return 'تغيّر السجل أو لم يعد متاحًا. حدّث البيانات وراجع تعديلك قبل إعادة الحفظ.';
   if(/fetch|network|offline/i.test(message)) return 'الاتصال انقطع. ما تأكدنا من الحفظ؛ حدّث البيانات قبل المحاولة مرة ثانية.';
   if(/Invalid login credentials/i.test(message)) return 'البريد أو كلمة المرور غير صحيحة.';
   if(/Email not confirmed/i.test(message)) return 'افتح رسالة تأكيد البريد أولًا.';
   if(/rate limit/i.test(message)) return 'طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم أعد المحاولة.';
   if(/schema cache|does not exist|Could not find the table/i.test(message)) return 'قاعدة البيانات تحتاج ملف الإعداد SQL. راجع خطوات README ثم أعد التحميل.';
-  if(/capacity|available time/i.test(message)) return 'مهام هذا اليوم تتجاوز وقتك المتاح. عدّل المدة أو اختر يومًا آخر.';
   if(/active.*session|one_active|already.*active/i.test(message)) return 'فيه جلسة شغّالة على حسابك. حدّث البيانات لاستكمالها.';
   if(/version|conflict|stale/i.test(message)) return 'تغيّرت الجلسة من جهاز آخر. حدّثنا البيانات؛ أعد المحاولة من حالتها الحالية.';
   return message;
