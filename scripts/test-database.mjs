@@ -24,6 +24,7 @@ try {
   }
   const tableGrant=await query(`select has_table_privilege('anon','public.subjects','select') as allowed,has_function_privilege('anon','public.start_focus(uuid,uuid,text,integer,uuid)','execute') as rpc`);
   assert.equal(tableGrant[0].allowed,false); assert.equal(tableGrant[0].rpc,false);
+  assert.equal((await query(`select has_function_privilege('anon','public.assign_asset_version()','execute') as allowed`))[0].allowed,false,'asset version trigger is not a public RPC');
   await query(`insert into auth.users(id,email,email_confirmed_at) values($1,'a@example.com',now()),($2,'b@example.com',now())`,[A,B]);
   await user(A);
   await query(`insert into public.profiles(user_id,weekly_minutes,onboarded) values($1,array[45,45,45,45,45,45,45],true)`,[A]);
@@ -174,6 +175,15 @@ try {
   await expectReject(()=>query(`update public.office_members set role='owner' where office_id=$1 and user_id=$2`,[office,B]),'role escalation must fail');
   const otherOffice=(await query(`select public.create_office('مكتب مستقل',null,null) as id`))[0].id;
   await expectReject(()=>query(`update public.office_tasks set office_id=$1 where id=$2`,[otherOffice,teamTask]),'task cannot move between offices');
+  await user(A);
+  await query(`insert into public.office_tasks(office_id,project_id,title,assignee_id,created_by,due_on)
+    select $1,$2,'مهمة العدد '||n,$3,$3,$4::date from generate_series(1,120) n`,[office,teamProject,A,today]);
+  const dashboard=(await query(`select public.office_dashboard($1) as result`,[office]))[0].result;
+  assert.equal(Number(dashboard.today_count),120,'dashboard counts all due tasks beyond the first page');
+  assert.equal(dashboard.today_tasks.length,5,'dashboard returns a bounded list');
+  await expectMessage(()=>query(`select public.office_dashboard($1)`,[otherOffice]),'المكتب غير متاح');
+  await user(B);
+  assert.equal(Number((await query(`select public.office_dashboard($1) as result`,[office]))[0].result.today_count),0,'dashboard counts only viewer tasks');
   const decision=(await query(`insert into public.office_decisions(office_id,project_id,title,created_by) values($1,$2,'اعتماد العرض',$3) returning id`,[office,teamProject,B]))[0].id;
   await expectMessage(()=>query(`update public.office_decisions set status='approved' where id=$1`,[decision]),'اعتماد القرار');
   await user(A);
